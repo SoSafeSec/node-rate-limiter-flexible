@@ -160,7 +160,7 @@ describe('RateLimiterCluster', function () {
     const rateLimiterCluster = new RateLimiterCluster({points: 1, duration: 1, keyPrefix: key});
     rateLimiterCluster.block(key, 2)
       .then((res) => {
-        expect(res.msBeforeNext > 1000).to.equal(true);
+        expect(res.msBeforeNext > 1000 && res.msBeforeNext <= 2000).to.equal(true);
         done();
       });
   });
@@ -198,6 +198,19 @@ describe('RateLimiterCluster', function () {
             expect(res).to.equal(true);
             done();
           })
+      });
+  });
+
+  it('consume applies options.customDuration to set expire', (done) => {
+    const key = 'consume.customDuration';
+    const rateLimiterCluster = new RateLimiterCluster({points: 2, duration: 5, keyPrefix: key});
+    rateLimiterCluster.consume(key, 1, {customDuration: 1})
+      .then((res) => {
+        expect(res.msBeforeNext <= 1000).to.be.true;
+        done();
+      })
+      .catch((rej) => {
+        done(rej);
       });
   });
 });

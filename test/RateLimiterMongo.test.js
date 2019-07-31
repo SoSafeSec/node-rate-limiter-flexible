@@ -28,12 +28,12 @@ describe('RateLimiterMongo with fixed window', function () {
 
   beforeEach(() => {
     mongoCollection = {
-      ensureIndex: () => {},
+      createIndex: () => {},
       findOneAndUpdate: () => {},
       findOne: () => {},
       deleteOne: () => {},
     };
-    sinon.stub(mongoCollection, 'ensureIndex').callsFake(() => {});
+    sinon.stub(mongoCollection, 'createIndex').callsFake(() => {});
   });
 
   it('consume 1 point', (done) => {
@@ -220,7 +220,7 @@ describe('RateLimiterMongo with fixed window', function () {
     });
     rateLimiter.block(testKey, 2)
       .then((res) => {
-        expect(res.msBeforeNext > 1000).to.equal(true);
+        expect(res.msBeforeNext > 1000 && res.msBeforeNext <= 2000).to.equal(true);
         done();
       })
       .catch(() => {
@@ -310,6 +310,20 @@ describe('RateLimiterMongo with fixed window', function () {
     mongoClientStub = sinon.stub(mongoClient, 'db').callsFake(() => mongoDb);
   });
 
+  it('use collection from client instead of db if Mongoose in use', () => {
+    const createIndex = sinon.spy();
+    const mongooseConnection = {
+      collection: () => ({
+        createIndex,
+      }),
+    };
+
+    new RateLimiterMongo({
+      storeClient: mongooseConnection,
+    });
+    expect(createIndex.called);
+  })
+
   it('delete key and return true', (done) => {
     const testKey = 'deletetrue';
     sinon.stub(mongoCollection, 'deleteOne').callsFake(() => {
@@ -350,5 +364,117 @@ describe('RateLimiterMongo with fixed window', function () {
         expect(res).to.equal(false);
         done();
       })
+  });
+
+  it('uses tableName option to create collection', (done) => {
+    const tableName = 'collection_name';
+    const mongoDb = {
+      collection: () => {},
+    };
+
+    sinon.stub(mongoDb, 'collection').callsFake((name) => {
+      expect(name).to.equal(tableName);
+      done();
+      return mongoCollection;
+    });
+
+    const client = {
+      db: () => mongoDb
+    }
+
+    new RateLimiterMongo({
+      storeClient: client,
+      tableName: tableName
+    });
+  });
+
+  it('_upsert adds options.attrs to where clause to find document by additional attributes in conjunction with key', (done) => {
+    const testKey = '_upsert';
+    const testAttrs = {
+      country: 'country1'
+    };
+    sinon.stub(mongoCollection, 'findOneAndUpdate').callsFake((where) => {
+      expect(where.country).to.equal(testAttrs.country);
+      done();
+      return Promise.resolve({
+        value: {
+          points: 1,
+          expire: 5000,
+        },
+      });
+    });
+
+    const rateLimiter = new RateLimiterMongo({ storeClient: mongoClient, points: 2, duration: 5 });
+    rateLimiter.consume(testKey, 1, { attrs: testAttrs })
+      .catch((err) => {
+        done(err);
+      });
+  });
+
+  it('forced _upsert adds options.attrs to where clause to find document by additional attributes in conjunction with key', (done) => {
+    const testKey = '_upsertforce';
+    const testAttrs = {
+      country: 'country2'
+    };
+    sinon.stub(mongoCollection, 'findOneAndUpdate').callsFake((where) => {
+      expect(where.country).to.equal(testAttrs.country);
+      done();
+      return Promise.resolve({
+        value: {
+          points: 1,
+          expire: 5000,
+        },
+      });
+    });
+
+    const rateLimiter = new RateLimiterMongo({ storeClient: mongoClient, points: 2, duration: 5 });
+    rateLimiter.block(testKey, 1, { attrs: testAttrs })
+      .catch((err) => {
+        done(err);
+      });
+  });
+
+  it('_get adds options.attrs to where clause to find document by additional attributes in conjunction with key', (done) => {
+    const testKey = '_get';
+    const testAttrs = {
+      country: 'country3'
+    };
+    sinon.stub(mongoCollection, 'findOne').callsFake((where) => {
+      expect(where.country).to.equal(testAttrs.country);
+      done();
+      return Promise.resolve({
+        value: {
+          points: 1,
+          expire: 5000,
+        },
+      });
+    });
+
+    const rateLimiter = new RateLimiterMongo({ storeClient: mongoClient, points: 2, duration: 5 });
+    rateLimiter.get(testKey, { attrs: testAttrs });
+  });
+
+  it('_delete adds options.attrs to where clause to find document by additional attributes in conjunction with key', (done) => {
+    const testKey = '_delete';
+    const testAttrs = {
+      country: 'country4'
+    };
+    sinon.stub(mongoCollection, 'deleteOne').callsFake((where) => {
+      expect(where.country).to.equal(testAttrs.country);
+      done();
+      return Promise.resolve({
+        result: {
+          n: 0,
+        },
+      });
+    });
+
+    const rateLimiter = new RateLimiterMongo({ storeClient: mongoClient, points: 2, duration: 5 });
+    rateLimiter.delete(testKey, { attrs: testAttrs });
+  });
+
+  it('set indexKeyPrefix empty {} if not provided', () => {
+    const rateLimiter = new RateLimiterMongo({ storeClient: mongoClient, points: 2, duration: 5 });
+    expect(Object.keys(rateLimiter.indexKeyPrefix).length).to.equal(0);
   });
 });

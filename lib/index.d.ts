@@ -3,22 +3,29 @@ export interface RateLimiterRes {
     readonly remainingPoints: number;
     readonly consumedPoints: number;
     readonly isFirstInDuration: boolean;
+    toString(): string;
+    toJSON(): {
+        remainingPoints: number;
+        msBeforeNext: number;
+        consumedPoints: number;
+        isFirstInDuration: boolean;
+    };
 }
 
 export class RateLimiterAbstract {
     constructor(opts: IRateLimiterOptions);
 
-    consume(key: string | number, pointsToConsume?: number): Promise<RateLimiterRes>;
+    consume(key: string | number, pointsToConsume?: number, options?: {[key: string]: any }): Promise<RateLimiterRes>;
 
-    penalty(key: string | number, points?: number): Promise<RateLimiterRes>;
+    penalty(key: string | number, points?: number, options?: {[key: string]: any }): Promise<RateLimiterRes>;
 
-    reward(key: string | number, points?: number): Promise<RateLimiterRes>;
+    reward(key: string | number, points?: number, options?: {[key: string]: any }): Promise<RateLimiterRes>;
 
-    block(key: string | number, secDuration: number): Promise<RateLimiterRes>;
+    block(key: string | number, secDuration: number, options?: {[key: string]: any }): Promise<RateLimiterRes>;
 
-    get(key: string | number): Promise<RateLimiterRes>;
+    get(key: string | number, options?: {[key: string]: any }): Promise<RateLimiterRes>|null;
 
-    delete(key: string | number): Promise<boolean>;
+    delete(key: string | number, options?: {[key: string]: any }): Promise<boolean>;
 
     getKey(key: string | number): string;
 }
@@ -45,6 +52,12 @@ interface IRateLimiterStoreOptions extends IRateLimiterOptions{
     dbName?: string;
     tableName?: string;
     timeoutMs?: number;
+}
+
+interface IRateLimiterMongoOptions extends IRateLimiterStoreOptions{
+    indexKeyPrefix?: {
+        [key: string]: any
+    };
 }
 
 interface ICallbackReady {
@@ -82,7 +95,26 @@ export class RateLimiterClusterMasterPM2 {
 export class RateLimiterRedis extends RateLimiterStoreAbstract {
 }
 
+export interface IRateLimiterMongoFunctionOptions {
+    attrs: {[key: string]: any};
+}
+
 export class RateLimiterMongo extends RateLimiterStoreAbstract {
+    constructor(opts: IRateLimiterMongoOptions);
+    indexKeyPrefix():Object;
+    indexKeyPrefix(obj?: Object):void;
+
+    consume(key: string | number, pointsToConsume?: number, options?: IRateLimiterMongoFunctionOptions): Promise<RateLimiterRes>;
+
+    penalty(key: string | number, points?: number, options?: IRateLimiterMongoFunctionOptions): Promise<RateLimiterRes>;
+
+    reward(key: string | number, points?: number, options?: IRateLimiterMongoFunctionOptions): Promise<RateLimiterRes>;
+
+    block(key: string | number, secDuration: number, options?: IRateLimiterMongoFunctionOptions): Promise<RateLimiterRes>;
+
+    get(key: string | number, options?: IRateLimiterMongoFunctionOptions): Promise<RateLimiterRes>|null;
+
+    delete(key: string | number, options?: IRateLimiterMongoFunctionOptions): Promise<boolean>;
 }
 
 export class RateLimiterMySQL extends RateLimiterStoreAbstract {
@@ -99,7 +131,7 @@ export class RateLimiterMemcache extends RateLimiterStoreAbstract {
 export class RateLimiterUnion {
     constructor(...limiters: RateLimiterAbstract[]);
 
-    consume(key: string | number, points?: number): Promise<RateLimiterRes>[];
+    consume(key: string | number, points?: number): Promise<RateLimiterRes[]>;
 }
 
 export class RLWrapperBlackAndWhite extends RateLimiterAbstract {
